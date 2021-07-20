@@ -1,0 +1,209 @@
+#!/bin/bash
+
+function loginfo() {
+if [[ $? -eq 0 ]];then
+    echo -e "\033[32m[INFO][$(date +"%F %T")] $1 succeed! \033[0m"
+else
+    echo -e "\033[31m[ERROR][$(date +"%F %T")] $1 failed! \033[0m"
+fi
+}
+
+function install_mysql() {
+echo -e "\033[32mBegin install mysql V5.7.28 ...\033[0m"
+
+# 安装依赖
+sudo yum install libaio -y >/dev/null 2>&1
+loginfo "libaio install"
+
+BASE_DIR=$(pwd)
+MYSQL_PKG_PATH=$BASE_DIR/mysql-5.7.28-linux-glibc2.12-x86_64.tar.gz
+DEPLOY_PATH="/opt"
+USER=$(whoami)
+GROUP=$(groups)
+MYSQL_URL="http://download.mrlapulga.com/Linux/Mysql/software/generic/mysql-5.7.28-linux-glibc2.12-x86_64.tar.gz"
+
+# 下载解压创建目录
+echo -e "\033[32mBegin download mysql V5.7.28 ...\033[0m"
+sudo curl -o ${DEPLOY_PATH}/mysql-5.7.28-linux-glibc2.12-x86_64.tar.gz ${MYSQL_URL} >/dev/null 2>&1
+loginfo "mysql software download"
+
+sudo tar xf ${MYSQL_PKG_PATH} -C ${DEPLOY_PATH}/ 
+loginfo "mysql software decompression"
+if [[ -d ${DEPLOY_PATH}/mysql ]];then
+    rm -rf ${DEPLOY_PATH}/mysql
+fi
+sudo ln -s ${DEPLOY_PATH}/mysql-5.7.28-linux-glibc2.12-x86_64 ${DEPLOY_PATH}/mysql 
+loginfo "create mysql dir soft link"
+if [[ -d /data/mysql ]];then
+    rm -rf /data/mysql
+fi
+sudo mkdir -p /data/mysql
+loginfo "create mysql data dir"
+
+# 修改启动脚本
+sudo sed -i '46s#basedir=#basedir=/opt/mysql#' ${DEPLOY_PATH}/mysql/support-files/mysql.server
+sudo sed -i '47s#datadir=#datadir=/data/mysql#' ${DEPLOY_PATH}/mysql/support-files/mysql.server
+sudo cp ${DEPLOY_PATH}/mysql/support-files/mysql.server /etc/init.d/mysqld
+sudo chmod 755 /etc/init.d/mysqld
+
+# 创建用户
+if ! grep -q '^mysql:' /etc/group
+then
+    sudo groupadd mysql
+    loginfo "create user mysql"
+fi
+
+if ! grep -q '^mysql:' /etc/passwd
+then
+    sudo useradd -r -g mysql -s /bin/false mysql
+    loginfo "create group mysql"
+fi
+
+# 赋予data目录和base目录普通用户组
+sudo chown -R ${USER}.${GROUP} ${DEPLOY_PATH}/mysql/
+sudo chown -R ${USER}.${GROUP} /data/
+
+
+if [ ! -f /usr/bin/mysql ]
+then
+    sudo ln -s /opt/mysql/bin/mysql /usr/bin/
+fi
+
+# 创建配置文件
+if [ -f /etc/my.cnf ]
+then
+    sudo rm -f /etc/my.cnf
+fi
+sudo bash -c "cat >> /etc/my.cnf" <<EOF
+[mysqld]
+datadir                             = /data/mysql
+basedir                             = /opt/mysql
+#tmpdir                              = /data/mysql/tmp_mysql
+port                                = 3306
+socket                              = /data/mysql/mysql.sock
+pid-file                            = /data/mysql/mysql.pid
+max_connections                     = 8000
+max_connect_errors                  = 100000
+max_user_connections                = 3000
+check_proxy_users                   = on
+mysql_native_password_proxy_users   = on
+local_infile                        = OFF
+symbolic-links                      = FALSE
+group_concat_max_len                = 4294967295
+max_join_size                       = 18446744073709551615
+max_execution_time                  = 20000
+lock_wait_timeout                   = 60
+autocommit                          = 1
+lower_case_table_names              = 1
+thread_cache_size                   = 64
+disabled_storage_engines            = "MyISAM,FEDERATED"
+character_set_server                = utf8mb4
+character-set-client-handshake      = FALSE
+collation_server                    = utf8mb4_general_ci
+init_connect                        = 'SET NAMES utf8mb4'
+transaction-isolation               = "READ-COMMITTED"
+skip_name_resolve                   = ON
+explicit_defaults_for_timestamp     = ON
+log_timestamps                      = SYSTEM
+local_infile                        = OFF
+event_scheduler                     = OFF
+query_cache_type                    = OFF
+query_cache_size                    = 0
+sql_mode                            = NO_ENGINE_SUBSTITUTION,STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO
+log_error                           = /data/mysql/mysql.err
+slow_query_log                      = ON
+slow_query_log_file                 = /data/mysql/slow.log
+long_query_time                     = 1
+general_log                         = OFF
+general_log_file                    = /data/mysql/general.log
+expire_logs_days                    = 99
+log-bin                             = /data/mysql/mysql-bin
+log-bin-index                       = /data/mysql/mysql-bin.index
+max_binlog_size                     = 500M
+binlog_format                       = mixed
+binlog_rows_query_log_events        = ON
+binlog_cache_size                   = 128k
+binlog_stmt_cache_size              = 128k
+log-bin-trust-function-creators     = 1
+max_binlog_cache_size               = 2G
+max_binlog_stmt_cache_size          = 2G
+relay_log                           = /data/mysql/relay
+relay_log_index                     = /data/mysql/relay.index
+max_relay_log_size                  = 500M
+relay_log_purge                     = ON
+relay_log_recovery                  = ON
+server_id                           = 1
+read_buffer_size                    = 1M
+read_rnd_buffer_size                = 2M
+sort_buffer_size                    = 64M
+join_buffer_size                    = 64M
+tmp_table_size                      = 64M
+max_allowed_packet                  = 128M
+max_heap_table_size                 = 64M
+connect_timeout                     = 43200
+wait_timeout                        = 43200
+back_log                            = 512
+interactive_timeout                 = 300
+net_read_timeout                    = 30
+net_write_timeout                   = 30
+skip_external_locking               = ON
+key_buffer_size                     = 16M
+bulk_insert_buffer_size             = 16M
+concurrent_insert                   = ALWAYS
+open_files_limit                    = 65000
+table_open_cache                    = 16000
+table_definition_cache              = 16000
+default_storage_engine              = InnoDB
+default_tmp_storage_engine          = InnoDB
+internal_tmp_disk_storage_engine    = InnoDB
+
+[client]
+socket                              = /data/mysql/mysql.sock
+default_character_set               = utf8mb4
+
+[mysql]
+default_character_set               = utf8mb4
+
+[ndatad default]
+TransactionDeadLockDetectionTimeOut = 20000
+EOF
+sudo chown -R ${USER}.${GROUP} /etc/my.cnf
+loginfo "configure my.cnf"
+
+# 创建SSL证书
+# sudo mkdir -p ${DEPLOY_PATH}/mysql/ca-pem/
+# sudo ${DEPLOY_PATH}/mysql/bin/mysql_ssl_rsa_setup -d ${DEPLOY_PATH}/mysql/ca-pem/ --uid=mysql
+# sudo chown -R ${USER}.${GROUP} ${DEPLOY_PATH}/mysql/ca-pem/
+
+# sudo bash -c "cat >> /data/mysql/init_file.sql" <<EOF
+# set global sql_safe_updates=0;
+# set global sql_select_limit=50000;
+# EOF
+# sudo chown -R ${USER}.${GROUP} /data/mysql/init_file.sql
+# sudo chown -R ${USER}.${GROUP} /etc/init.d/mysqld
+
+# 初始化
+${DEPLOY_PATH}/mysql/bin/mysqld --initialize --user=mysql --basedir=${DEPLOY_PATH}/mysql --datadir=/data/mysql 
+loginfo "initialize mysql"
+
+# 过滤初始密码
+mysql_passwd=$(grep 'A temporary password is generated' /data/mysql/mysql.err |awk '{print $NF}')
+
+# 启动服务
+/etc/init.d/mysqld start
+loginfo "start mysqld"
+
+
+# 修改初始密码
+${DEPLOY_PATH}/mysql/bin/mysqladmin -uroot -p${mysql_passwd} password '123456'
+if [ $? -ne 0 ];then
+    loginfo "initialize root password"
+fi
+
+# 客户端环境变量
+echo "export PATH=\$PATH:${DEPLOY_PATH}/mysql/bin" | sudo tee /etc/profile.d/mysql.sh
+source /etc/profile.d/mysql.sh
+loginfo "configure envirement"
+}
+
+install_mysql
