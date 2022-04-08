@@ -1,0 +1,31 @@
+tomcat等服务如何使用logrotate切割日志
+1.sudo touch /etc/logrotate.d/tomcat
+sudo vim /etc/logrotate.d/tomcat
+/usr/tomcat/logs/catalina.out {
+        copytruncate
+        daily
+        rotate 60
+        compress
+        delaycompress
+        missingok
+}
+#初次配置完强制执行一次logrotate
+/usr/sbin/logrotate -f /etc/logrotate.d/tomcat
+
+2.配置计划任务cron
+ vi logrotate.sh
+#!/bin/bash
+ /usr/sbin/logrotate /etc/logrotate.conf
+chmod a+x logrotate.sh
+2.添加自动化任务每天中午12点执行一次日志轮转
+00 12 * * * /usr/bin/sh  logrotate.sh
+
+3.在配置脚本
+每天晚上11点50切割日志文件，同时删除超过30天的日志
+log_path=/usr/local/tomcat/logs
+d=`date +%Y-%m-%d`
+d90=`date -d'30 day ago' +%Y-%m-%d`
+cd ${log_path} && cp catalina.out $log_path/cron/catalina.out.$d.log
+echo > catalina.out
+rm -rf $log_path/cron/catalina.out.${d90}.log
+50 23 * * * sh /shell/log.sh

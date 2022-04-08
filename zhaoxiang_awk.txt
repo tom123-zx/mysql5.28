@@ -1,0 +1,53 @@
+﻿1.打印出apache主配置文件中所有的有效内容(至少使用两种方法实现)
+  awk '!/^#/&&!/^ *#/&&!/^$/' /tmp/http
+   grep -v "^$" /etc/http/conf/httpd.conf | grep -v "^ *#"
+   grep -vE "^[[ :blank:]]*# | ^$"/etc/httpd/conf/httpd .conf
+   sed -r '/^[[ :blank: ]]*#|^$/d' /etc/httpd/conf/httpd .conf
+   awk '!/^[[ :blank:] ]*#|^$/ {print}' /etc/httpd/conf/httpd. conf
+2.非交互式修改apache监听端口为8080,注意在修改前备份
+  sed 's/Listen 80/Listen 8080/' /tmp/http
+3.在含有adm的行下方插入一行空行(sed/awk两种方法做) 
+   sed '/adm/a\\ ' /tmp/pass
+   awk '/adm/{print $0,"\n"}' /tmp/pass 
+4.将第2行内容放到第5行上方
+   sed '2h;2d;4G' /tmp/http
+5.使用第2行内容替换第5行内容
+   sed '2h;4G;5d' /tmp/http
+   sed '2h;5x' /tmp/http
+6.将第5行内容替换成hello world
+   sed -n'5c\hello world' /tmp/http
+7.在第5行和第6行之间插入hello world
+    sed '5a\hello wrold' /tmp/pass
+    sed '6i\hello wrold' /tmp/pass 
+8.将偶数行的小写字母替换成大写字母
+   sed '2~2s/[a-z]/\u&/g' /tmp/pass
+9.打印出含有adm行的下一行内容
+    sed -n '/adm/{n;p}' /tmp/pass 
+10.打印含有adm行及前面所有行内容
+    sed '/adm/q' /tmp/http
+11.将所有行的第2个i替换成I,除了含有adm的行和含有root的行外.
+   sed -r '/root|adm/!s/i/I/2' /tmp/http
+12.打印UID不等于GID的用户名,UID,GID
+    awk -F: '$3!=$4{print $1,$3,$4}' /etc/passwd
+13.格式化打印UID小于10的所有用户的用户名,UID,GID,用户名左对齐,数字右对齐.
+    awk -F: '$3<10{printf "%-20s%8s%8s\n",$1,$3,$4}' /etc/passwd
+14.打印用户名中仅含3个字符的用户的用户名,UID.输出格式为: 用户名:UID
+    awk -F '\<[:alnum:]\{3\}\>{printf $1":"$3}' /etc/passwd
+	awk -F '$1~/^...$/{print：：i $1":"$3}' /etc/passwd
+	awk -F 'length($1)==3{print $1":"$3}' /etc/passwd
+15.打印所有可登录用户的用户名,UID.输出格式为: XXX 的UID为XXX
+    awk -F : '/sh$/{print "$1的UID为$3"}' /etc/passwd  
+16.打印出UID为偶数的用户的用户名,UID
+    awk -F : '$3%2==0{printf $1,$3}' /etc/passwd
+17.至少三种方法实现在奇数行的下方插入空行
+    awk '{if (NR%2==1){print $0"\n"}else{print $0}}' /tmp/adm.txt 
+	sed '1~2G' /tmp/pass
+	sed '1~2a \\n' /tmp/pass
+18.打印出/etc/passwd文件中UID小于或等于行号的内容, 内容包括行号,用户名,UID
+    awk -F: '$3<=NR{printf NR,$1,$3}' /etc/passwd
+19.使用awk统计出文件的行号,用两种方法实现
+    awk '{printf NR,$0}' /etc/passwd
+	awk 'END{print NR}' /etc/passwd
+	awk 'BEGIN(count=0)(count++)END(print count)' /etc/passwd
+20.使用awk统计出可登录用户的数量
+	awk -F: '/sh$/{count++}END{print count}' /etc/passwd

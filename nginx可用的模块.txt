@@ -1,0 +1,2 @@
+用到过模块有（负载均衡upstream、反向代理proxy_pass、location、rewrite等）。
+proxy模块中配置过:proxy_set_header、proxy_connect_timeout、proxy_send_timeout、proxy_buffer_*

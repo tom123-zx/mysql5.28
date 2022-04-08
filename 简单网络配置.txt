@@ -1,0 +1,36 @@
+临时: 马上生效,重启失效
+永久: 不会马上生效,下次重启生效
+
+关闭防火墙
+  el7: firewalld   
+    临时关闭: systemctl stop firewalld      #立即关闭,即刻生效
+    永久关闭: systemctl disable firewalld   #不会马上生效,下次启动才会生效
+  el6: iptables
+    临时关闭: /etc/init.d/iptables stop     #立即关闭,即刻生效
+    永久关闭: chkconfig iptables off        #不会马上生效,下次启动才会生效
+
+关闭selinux
+  临时关闭: setenforce 0
+  永久关闭: 修改/etc/selinux/config文件,  SELINUX=disabled
+
+配置主机名
+  临时: hostname 主机名                    #el6,el7一样
+  永久: 
+      el7: echo 主机名 > /etc/hostname        
+      el6: 修改/etc/sysconfig/network文件中的: HOSTNAME=主机名
+
+配置IP地址
+  临时: ifconfig 网卡名称 ip地址
+  永久: 修改网卡配置文件: /etc/sysconfig/network-scripts/ifcfg-网卡名称
+    TYPE=Ethernet         #类型:以太网  固定
+    BOOTPROTO=none        #协议: dhcp:自动获取   static|none  静态,必须要手动配置
+    DEVICE=ens33          #设备名称,一定要和真正的设备名称一致
+    ONBOOT=yes            #是否开机启用
+    IPADDR=10.3.145.250   #手动配置的IP地址
+    PREFIX=24		  #子网掩码(网络位的长度),非必须
+    NETMASK=255.255.255.0 #子网掩码,非必须,如果需要配置,和PREFIX任选其一
+    GATEWAY=10.3.145.1    #手动配置的网关,非必须,除非需要连接外网
+    DNS1=114.114.114.114  #手动配置的主DNS服务器,需要连接外网才需要配置
+  
+配置网关
+配置DNS

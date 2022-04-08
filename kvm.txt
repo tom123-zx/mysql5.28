@@ -1,0 +1,206 @@
+#!/bin/sh
+#kvm管理脚本
+
+export LANG=zh_CN.UTF-8
+#启动模块
+START() {
+	virsh list --all
+	echo "输入要开启的虚拟机，多个虚拟机用空格隔开，全部开启输入all"
+	read -a name
+	[[ "${name[0]}" == "all" ]]&& name=(`virsh list --all|awk 'NR>2{print $2}'|grep -v "^$"`)
+	for i in `seq 1 ${#name[*]}`;do
+		stat=$(virsh list --all|awk '$2~/^'${name[i-1]}'$/{print $3}')
+		[[ "$stat" =~ ^$ ]] && echo "没有${name[i-1]}虚拟机" && continue
+		if [[ "$stat" == "关闭" ]];then
+			virsh start ${name[i-1]} &> /dev/null && echo "${name[i-1]}已经开启"
+		else
+			echo "${name[i-1]}已经开启,请勿重复"
+		fi
+	done
+}
+
+#停止模块
+STOP() {
+	virsh list --all
+    echo "输入要关闭的虚拟机，多个虚拟机用空格隔开，全部关闭输入all"
+    read -a name
+    [[ "${name[0]}" == "all" ]]&& name=(`virsh list --all|awk 'NR>2{print $2}'|grep -v "^$"`)
+    for i in `seq 1 ${#name[*]}`;do
+        stat=$(virsh list --all|awk '$2~/^'${name[i-1]}'$/{print $3}')
+        if [[ "$stat" == "关闭" ]];then
+            echo "${name[i-1]}已经关闭,请勿重复"
+        else
+            virsh destroy ${name[i-1]} &> /dev/null && echo "${name[i-1]}已经关闭"
+        fi
+    done
+}
+
+#添加模块
+ADD() {
+	STAT() {
+		! [ -f "/tmp/disk" ]&&echo -e "<disk type='file' device='disk'>\n  <driver name='qemu' type='qcow2'/>\n  <source file='/home/tony/work/vm_demo/disk/test_disk.qcow2'/>\n  <target dev='vdb' bus='virtio'/>\n</disk>" > /tmp/disk.xml
+		! [ -f "/tmp/disk" ]&&echo -e "<interface type='network'>\n  <source network='default' bridge='virbr0'/>\n  <model type='virtio'/>\n</interface>" > /tmp/network.xml
+		read -p "请输入要添加的主机名：" name
+		read -p "请输入disk或network：" name2
+		virsh attach-device $name /tmp/${name2}.xml --persistent
+	}
+	CPU() {
+		read -p "请输入要添加CPU的主机名：" name
+		read -p "请输入要添加CPU数量：" num
+		virsh setvcpus $name $num --live  --config
+	}
+	MEM() {
+	    read -p "请输入要添加内存的主机名：" name
+	    read -p "请输入要添加内存的大小，以KB为单位：" num
+	    virsh setmem $name $num --live  --config
+	}
+	while true
+	do
+	    clear
+	    printf "\n\n"
+	    printf "\t-----------------------\n"
+	    printf "\t-----   1.添加硬盘|网卡\n"
+	    printf "\t-----   2.添加CPU\n"
+	    printf "\t-----   3.添加内存\n"
+	    printf "\t-----   4.返回上一级\n"
+	    printf "\t-----------------------\n"
+	    read -p "请输入选择：" cho
+	    case $cho in
+	        1)STAT
+	          exit
+	        ;;
+	        2)CPU
+	         exit
+	        ;;
+	        3)MEM
+	         exit
+	        ;;
+	        4)MAIN
+	        ;;
+	        *)
+	        ;;
+	    esac
+	done
+}
+
+#克隆模块
+CLONE() {
+	num=({0..9} {a..f})
+	images=/var/lib/libvirt/images/
+	qemu=/etc/libvirt/qemu/
+	CHAR(){
+		for i in $(seq $1);do
+			index=$[RANDOM%16]
+			echo -n ${num[$index]}
+		done
+	}
+	WCLONE() {
+		read -p "请输入要克隆的主机名：" name
+		read -p "请输入新的主机名：" name2
+		stat=$(virsh list --all|awk '$2~/^'$name'$/{print $3}')
+	    [[ "$stat" == "running" ]] && read -p "$name虚拟机正在运行,强制关闭输入 yes|y：" flag
+        if [[ "$flag" =~ [yY][eE][sS]|[yY] ]] || [[ "$stat" == "关闭" ]];then
+    	    virsh destroy $name
+			virt-clone -o $name -n $name2 -f $images$name2.qcow2
+			cp $qemu$name.xml $qemu$name2.xml
+			sed -i "/<name>/c \ \ <name>$name2</name>" $qemu$name2.xml
+			sed -i "/<uuid>/c \ \ <uuid>$(CHAR 8)-$(CHAR 4)-$(CHAR 4)-$(CHAR 4)-$(CHAR 12)</uuid>" $qemu$name2.xml
+			sed -i "/<source file/c \ \ <source file='/var/lib/libvirt/images/test.qcow2'/>" $qemu$name2.xml
+			sed -i "/<mac/c \ \ <mac address='52:$(CHAR 2):$(CHAR 2):$(CHAR 2):$(CHAR 2):$(CHAR 2)'/>" $qemu$name2.xml
+			virsh define $qemu$name2.xml
+		fi
+	}
+	ZCLONE() {
+		read -p "请输入要克隆的主机名：" name
+        read -p "请输入新的主机名：" name2
+        stat=$(virsh list --all|awk '$2~/^'$name'$/{print $3}')
+        [[ "$stat" == "running" ]] && read -p "$name虚拟机正在运行,强制关闭输入 yes|y：" flag
+        if [[ "$flag" =~ [yY][eE][sS]|[yY] ]] || [[ "$stat" == "关闭" ]];then
+			virsh destroy $name &> /dev/null
+			qemu-img create -f qcow2 -b $images$name.qcow2 $images$name2.qcow2 
+			cp $qemu$name.xml $qemu$name2.xml
+	        sed -i "/<name>/c \ \ <name>$name2</name>" $qemu$name2.xml
+			sed -i "/<uuid>/c \ \ <uuid>$(CHAR 8)-$(CHAR 4)-$(CHAR 4)-$(CHAR 4)-$(CHAR 12)</uuid>" $qemu$name2.xml
+	        sed -i "/<source file/c \ \ <source file='/var/lib/libvirt/images/test.qcow2'/>" $qemu$name2.xml
+	        sed -i "/<mac/c \ \ <mac address='52:$(CHAR 2):$(CHAR 2):$(CHAR 2):$(CHAR 2):$(CHAR 2)'/>" $qemu$name2.xml
+			virsh define $qemu$name2.xml
+		fi
+	}
+	while true
+	do
+	    clear
+	    printf "\n\n"
+	    printf "\t-----------------------\n"
+	    printf "\t-----   1.完整克隆(耗时长)\n"
+	    printf "\t-----   2.链接克隆(耗时短)\n"
+	    printf "\t-----   3.返回上一级\n"
+	    printf "\t-----------------------\n"
+	    read -p "请输入选择：" cho
+	    case $cho in
+	        1)WCLONE
+	          exit
+	        ;;
+	        2)ZCLONE
+	         exit
+	        ;;
+	        3)MAIN
+	        ;;
+	        *)
+	        ;;
+	    esac
+	done
+}
+
+#删除模块
+DEL() {
+	virsh list --all
+	echo "输入要删除的虚拟机，多个虚拟机用空格隔开"
+    read -a name
+    for i in `seq 1 ${#name[*]}`;do
+        stat=$(virsh list --all|awk '$2~/^'${name[i-1]}'$/{print $3}')
+        [[ "$stat" == "running" ]] && read -p "${name[i-1]}虚拟机正在运行,强制关闭输入 yes|y" flag
+		if [[ "$flag" =~ [yY][eE][sS]|[yY] ]] || [[ "$stat" == "关闭" ]];then
+			virsh destroy ${name[i-1]} &> /dev/null
+            virsh undefine ${name[i-1]} &> /dev/null
+			rm -rf /var/lib/libvirt/images/${name[i-1]}.qcow2
+            echo "${name[i-1]}删除成功"
+        fi
+    done
+}
+
+#主程序
+MAIN() {
+	while true
+	do
+	    clear
+	    printf "\n\n"
+	    printf "\t-----------------------------------\n"
+	    printf "\t-----   1.开启虚拟机\n"
+	    printf "\t-----   2.关闭虚拟机\n"
+	    printf "\t-----   3.热添加硬件\n"
+	    printf "\t-----   4.克隆虚拟机\n"
+	    printf "\t-----   5.删除虚拟机\n"
+	    printf "\t---------按其他键退出--------------\n"
+	    read -p "请输入选择：" cho
+	    case $cho in
+	        1)START
+	          exit
+	        ;;
+	        2)STOP
+	         exit
+	        ;;
+	        3)ADD
+	         exit
+	        ;;
+	        4)CLONE
+	         exit
+	        ;;
+	        5)DEL
+	         exit
+	        ;;
+	        *)exit
+	        ;;
+	    esac
+	done
+}
+MAIN
